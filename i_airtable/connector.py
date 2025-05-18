@@ -1,18 +1,49 @@
-import requests
+"""Airtable connector for Aracnid integration framework.
+"""
+import os
 from typing import Any, Dict, List, Optional
+
 from aracnid_core.base import BaseConnector
+from pyairtable import Api, Table
 
 
 class AirtableConnector(BaseConnector):
-    def __init__(self, base_id: str, table_name: str, api_key: str):
+    """Airtable connector for Aracnid integration framework.
+    """
+    def __init__(self, base_id: str, table_name: str):
+        """Initialize the Airtable connector.
+        Args:
+            base_id (str): The Airtable base ID.
+            table_name (str): The Airtable table name.
+            api_key (str): The Airtable API key.
+
+        Environment Variables:
+            AIRTABLE_API_KEY: The Airtable API key.
+        """
+        # read environment variables
+        self.air_api_key = os.environ.get('AIRTABLE_API_KEY')
+        if not self.air_api_key:
+            raise ValueError('AIRTABLE_API_KEY environment variable is required.')
+
+        # initialize api
+        self.api = Api(self.air_api_key)
+
+        # set the base
         self.base_id = base_id
+        bases = self.api.bases()
+        self.base = None
+        for base in bases:
+            if base.id == self.base_id:
+                self.base = base
+                break
+        if not self.base:
+            raise ValueError(f'Base with ID {self.base_id} not found.')
+
+        # set the table
         self.table_name = table_name
-        self.api_key = api_key
-        self.api_url = f'https://api.airtable.com/v0/{self.base_id}/{self.table_name}'
-        self.headers = {
-            'Authorization': f'Bearer {self.api_key}',
-            'Content-Type': 'application/json'
-        }
+        self.table = Table(self.air_api_key, self.base_id, table_name)
+        if not self.table:
+            raise ValueError(f'Table with name {self.table_name} not found in base {self.base_id}.')
 
     def create(self, record: Dict) -> Dict:
         response = requests.post(self.api_url, json={'fields': record}, headers=self.headers)
@@ -78,4 +109,7 @@ class AirtableConnector(BaseConnector):
         return count
 
     def get_source_name(self) -> str:
-        return f'airtable.{self.table_name}'
+        if not self.base:
+            raise ValueError(f'Base with ID {self.base_id} not found.')
+
+        return f'airtable.{self.base.name}.{self.table_name}'
